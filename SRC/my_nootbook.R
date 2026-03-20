@@ -171,8 +171,12 @@ add_three <-function(x){
   return(y)
 }
 add_three(5)
-source("add_three.R")#保存在工作目录之后有
+source("add_three.R")#保存在工作目录之后有，表示调用这个函数
+source("C:/Users/lx/Documents/tutorial_2026/SRC/add_three.R")#详细路径太长
+source("SRC/add_three.R")#用相对路径访问
 add_three(7)
 getwd()
 
+#Tools-Global options-Code-snippets可以建立快捷的输入
+#snippets+名称可以用于快捷
 
