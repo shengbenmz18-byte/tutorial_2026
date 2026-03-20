@@ -6,9 +6,7 @@ output:
   pdf_document: 
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+```{r}
 #NO1
 installed.packages()
 rownames(installed.packages())
@@ -33,5 +31,6 @@ check_threshold <- function(vec, threshold = 35){
 }
 print(x)
 check_threshold(x)
+```
 
 

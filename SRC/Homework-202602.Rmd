@@ -2,23 +2,26 @@
 title: "Homework-202602"
 author: "LiuYanru"
 date: "2026-03-20"
-output: word_document
+output:
+  pdf_document: default
+  word_document: default
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
+```{r}
 #NO1
 installed.packages()
 rownames(installed.packages())
+options(repos = c(CRAN = "https://mirrors.tuna.tsinghua.edu.cn/CRAN/"))
 "tidyverse" %in% rownames(installed.packages())
 install.packages('tidyverse')
 library(tidyverse)
+ls("package:tidyverse")
+lsf.str("package:tidyverse")
+data(package = "tidyverse")
 packageVersion("tidyverse")
 packageDescription("tidyverse")
 help(package = "tidyverse")
-
+knitr::opts_chunk$set(echo = TRUE)
 #NO2
 x <- rnorm(n = 10, mean= 35, sd = 10)
 check_threshold <- function(vec, threshold = 35){
@@ -30,3 +33,5 @@ check_threshold <- function(vec, threshold = 35){
 }
 print(x)
 check_threshold(x)
+```
+
