@@ -1,0 +1,21 @@
+#NO1
+installed.packages()
+rownames(installed.packages())
+"tidyverse" %in% rownames(installed.packages())
+install.packages('tidyverse')
+library(tidyverse)
+packageVersion("tidyverse")
+packageDescription("tidyverse")
+help(package = "tidyverse")
+
+#NO2
+x <- rnorm(n = 10, mean= 35, sd = 10)
+check_threshold <- function(vec, threshold = 35){
+  result <- logical(length(vec))
+  for(i in 1:length(vec)){
+    result[i] <- vec[i] > threshold
+  }
+  return(result)
+}
+print(x)
+check_threshold(x)
