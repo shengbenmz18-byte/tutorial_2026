@@ -156,7 +156,12 @@ array1
 
 # Numeric Function
 abs(-12)
-
+log(12)
+sqrt(121)#开方
+exp(15)
+floor(8.9)
+ceiling(8.9)
+round(8.4)
 
 #installing and loading packages
 
@@ -173,10 +178,24 @@ add_three <-function(x){
 add_three(5)
 source("add_three.R")#保存在工作目录之后有，表示调用这个函数
 source("C:/Users/lx/Documents/tutorial_2026/SRC/add_three.R")#详细路径太长
-source("SRC/add_three.R")#用相对路径访问
+source("SRC/add_three.R")#用相对路径访问;隐藏的是当前的工作目录
 add_three(7)
 getwd()
 
 #Tools-Global options-Code-snippets可以建立快捷的输入
 #snippets+名称可以用于快捷
+
+install.packages('TransOmicsData')
+data(package = "TransOmicsData")#查看特定包中的数据集
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+#因为TransOmicsData是一个生物信息的数据集，当前默认的是使用CRAN安装，
+#有可能储存在存放在专门为生物信息学服务的 Bioconductor 仓库里，
+#因此先安装这个仓库
+BiocManager::install("TransOmicsData")
+
+
+
+
+
 
