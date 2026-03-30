@@ -194,7 +194,67 @@ if (!require("BiocManager", quietly = TRUE))
 #因此先安装这个仓库
 BiocManager::install("TransOmicsData")
 
+x <- c(100,120,140,160,180,200,220,240,260,280)
+y <- c(55,60,62,64,68,70,80,85,90,95)
+df1 <-data.frame(x,y)
 
+plot(y ~ x)#画出对应点图
+abline(lm(y ~ x))#加线性关系线
+
+boxplot(x, main="x",#主标题为x
+        sub=paste("Outlier rows: ",#设置副标题
+                              boxplot.stats(x)$out))#boxplot.stats(x)计算箱线图的统计量
+#$out提取异常值；paste将Outlier rows： 与异常值连在一起
+boxplot(y, main="y",sub=paste("Outlier rows: ",
+                              boxplot.stats(y)$out))
+
+plot(density(x), main = "Density Plot: x", ylab = "Frequency",
+     sub = paste("Skewness: ",round(e1071::skewness(y), 2)))
+plot(density(y), main = "Density Plot: y", ylab = "Frequency",
+     sub = paste("Skewness: ",round(e1071::skewness(y), 2)))
+
+install.packages('e1071')
+library(e1071)
+library(tidyr)
+version#查看R的版本
+RStudio.Version()$version
+install.packages('installr')#安装更新R的包
+library(installr)
+updateR()#更新R
+update.packages(ask = FALSE, checkBuilt = TRUE)
+.libPaths()
+personal_lib <- "C:/Users/lx/Documents/R/win-library/4.5"
+dir.create(personal_lib, recursive = TRUE, showWarnings = FALSE)
+.libPaths(c(personal_lib, .libPaths()))
+file.edit("~/.Renviron")
+.libPaths()
+installed.packages()[, "LibPath"]
+Sys.getenv("R_LIBS_USER")
+# 获取系统库中的所有包（排除R自带的base包）
+system_packages <- installed.packages(lib.loc = .libPaths()[2], priority = "NA")
+
+# 查看有哪些包在系统库中
+system_packages[, c("Package", "Version")]
+
+# 重新安装这些包到个人库
+install.packages(rownames(system_packages), lib = .libPaths()[1])
+install.packages('tidyverse')
+library("tidyverse")
+library(dplyr)
+install.packages('ade4')
+data(package= "ade4")#查看其中所有的数据集
+library(ade4)
+data(doubs)#loading data
+head(doubs)#查看前几行
+str(doubs)#查看数据结构
+colnames(doubs$env)#查看环境变量名称
+doubs$env %>% #管道操作符，把左边的数据传给右边
+  select(dfs, alt, oxy) %>%
+  filter(alt > 300)
+doubs$env %>%
+  filter(!is.na(oxy)) %>%
+  mutate(oxygen_category = ifelse(oxy >90,"High", "Low")) %>%
+  head()
 
 
 
