@@ -255,7 +255,55 @@ doubs$env %>%
   filter(!is.na(oxy)) %>%
   mutate(oxygen_category = ifelse(oxy >90,"High", "Low")) %>%
   head()
+library(grid)
+# 先画一个散点图
+plot(1:10, rnorm(10), main = "带网格的散点图")
+
+# 添加默认网格线
+grid()
+
+# 添加自定义网格线
+grid(nx = 5, ny = 5, col = "gray", lty = 2)  # 5×5 灰色虚线网格
 
 
+# 安装并加载包
+install.packages("randomForest")
+library(randomForest)
 
+# 使用内置数据集 iris
+data(iris)
+
+# 划分训练集和测试集
+set.seed(123)
+train_index <- sample(1:nrow(iris), 0.7 * nrow(iris))
+train_data <- iris[train_index, ]
+test_data  <- iris[-train_index, ]
+
+# 建立随机森林模型
+rf_model <- randomForest(
+  Species ~ .,        # 用其余变量预测 Species
+  data = train_data,  # 训练集
+  ntree = 200,        # 树的数量
+  mtry = 2,           # 每次分裂时随机选取的特征数
+  importance = TRUE   # 计算变量重要性
+)
+
+# 查看模型
+print(rf_model)
+
+# 在测试集上预测
+pred <- predict(rf_model, newdata = test_data)
+
+# 混淆矩阵
+table(Predicted = pred, Actual = test_data$Species)
+
+# 计算准确率
+accuracy <- mean(pred == test_data$Species)
+print(accuracy)
+
+# 查看变量重要性
+importance(rf_model)
+
+# 绘制变量重要性图
+varImpPlot(rf_model)
 

@@ -1,0 +1,56 @@
+---
+title: "Homework-202604"
+author: "LiuYanru"
+date: "2026-04-07"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+
+## 1.从建模目标、建模算法和评估方面，阐述机器学习建模与传统统计模型有哪些不同？
+(1)建模目标：
+传统统计模型更强调变量关系解释、参数估计和假设检验，而机器学习更强调预测精度和泛化能力
+(2)建模算法：
+传统统计模型通常基于较强的先验假设，如线性、正态性和独立性，模型结构清晰、参数含义明确；机器学习则对数据分布假设较少，能够处理高维、非线性和复杂交互关系，但可解释性相对较弱。
+(3)评估方面：
+传统统计模型更关注p值、置信区间、R2和残差分析等，以判断模型是否合理；机器学习则更多采用训练集/测试集划分、交叉验证以及准确率、召回率、F1值、RMSE等指标来评价模型对未知数据的预测能力。
+
+
+## 2.生态学上常用树模型，包括随机森林、提升回归树。建模步骤包括：数据预处理、拆分数据集、选择特征、算法和训练模型、模型评估等。caret为各种机器学习算法提供了统一模板，加载doubs数据集，请根据问题填空。
+
+```{r}
+# 1）对于doubs中的鱼群数据，按照样地，计算各样地鱼类总丰度，作为新列abund
+library(ade4)#loading
+library(dplyr)
+data(doubs)
+doubs$fish
+doubs_data <- doubs$env
+doubs_data$abund <- rowSums(doubs$fish)
+head(doubs_data)#see the result
+# 2）利用train()，采用默认boostrap重采样方法，训练随机森林（randomForest）模型
+library(caret)
+set.seed(123)
+index <- createDataPartition(doubs_data$abund, p = 0.7, 
+                             list = FALSE)
+training_data <- doubs_data[index,]
+testing_data <- doubs_data[-index,]
+model_rf <- train(abund ~ .,  data = training_data,  method = "rf")
+# 3）通过trainControl()，向train()添加10-fold cross-validation重采样， 以优化参数
+fitControl <- trainControl(method = "repeatedcv",  number = 10, repeats = 5)
+model_rf <- train(abund ~ ., data = training_data, method = "rf", trControl =fitControl)
+# 4）在train()中，增加中心化和标准化等数据预处理，提高模型精度
+model_rf <- train(abund ~ ., data = training_data,  method = "rf", 
+                  preProcess = c('scale', 'center'),
+                  trControl =fitControl)
+# 5）rf有mtry和tree两个参数，可以通过expand.grid()设置调优，并在train()添加
+grid <- expand.grid(.mtry = c(1:10))
+model_rf <- train(abund ~ ., data = training_data, method = "rf",
+                  preProcess = c('scale', 'center'),
+                  trControl = fitControl,
+                  tuneGrid = grid)
+```
+
+## 3.什么是递归消除选择？在caret包中，为何选择随机森林等树模型时，没有特征选择这个过程？
+(1)递归消除选择（RFE）是一种常用的特征选择方法，其思想是先用全部变量建模，根据变量重要性删除最不重要的一部分变量，再用剩余变量重新建模，如此反复进行，最后比较不同变量子集的模型效果，选出最优特征组合。
+(2)在 caret 包中，使用随机森林等树模型时通常不单独强调特征选择过程，是因为这类模型本身在建树时就会自动选择对分类或回归最有用的变量，具有一定的“内置特征筛选”能力，而且caret的train() 默认主要负责模型训练与参数调优，并不会自动执行像 RFE 这样的外部特征选择，因此流程里常表现为没有单独的特征选择步骤。
