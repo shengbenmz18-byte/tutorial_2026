@@ -3,8 +3,7 @@ title: "Homework-202604"
 author: "LiuYanru"
 date: "2026-04-07"
 output:
-  pdf_document:
-    latex_engine: xelatex
+  word_document:
 ---
 
 
@@ -34,10 +33,11 @@ set.seed(123)
 index <- createDataPartition(doubs_data$abund, p = 0.7, 
                              list = FALSE)
 training_data <- doubs_data[index,]
+
 testing_data <- doubs_data[-index,]
 model_rf <- train(abund ~ .,  data = training_data,  method = "rf")
-# 3）通过trainControl()，向train()添加10-fold cross-validation重采样， 以优化参数
-fitControl <- trainControl(method = "repeatedcv",  number = 10, repeats = 5)
+# 3）通过trainControl()，向train()添加3-fold cross-validation重采样， 以优化参数
+fitControl <- trainControl(method = "repeatedcv",  number = 3, repeats = 5)
 model_rf <- train(abund ~ ., data = training_data, method = "rf", trControl =fitControl)
 # 4）在train()中，增加中心化和标准化等数据预处理，提高模型精度
 model_rf <- train(abund ~ ., data = training_data,  method = "rf", 

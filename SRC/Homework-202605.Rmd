@@ -1,0 +1,88 @@
+---
+title: "homework-202605"
+author: "LiuYanru"
+date: "2026-04-13"
+output: 
+  word_document:
+    reference_docx: reference.docx
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# 问题1
+
+请列出基于R脚本获取网络数据的三种方式？一些生态专业数据库提供了API，方便访问和下载数据，其中，API端点指的是什么？
+
+## 三种方式：
+（1）使用专门的R包访问数据库，许多在线数据库和服务提供专门的R包，使得数据获取更加简便。
+（2）API接口：API（应用程序接口）是获取网上数据库最常用的方法。API允许程序与服务进行交互，从而获取所需的数据。大多数在线服务提供API以便用户能够访问其数据库。
+（3）Web Scraping：是一种从网页中提取数据的方法，适用于没有提供API接口的网站。
+
+## API端点:
+API端点指的是API服务中某个具体功能对应的访问地址（URL），用户通过向该地址发送请求来获取数据或执行操作。
+
+# 问题2
+
+```{r}
+#1）从ade4包中加载doubs数据集，并读取鱼类丰富度数据fish。
+
+data(doubs, package = "ade4")
+#从 ade4 包中加载内置数据集 doubs
+
+Spe <- doubs$fish
+#提取 doubs 数据集中的鱼类丰富度数据 fish，并赋值给 Spe
+
+Spe
+
+
+#2）创建和连接名为doubs.sqlite数据库，将Spe导入其中，名为Spe_sqlite。
+
+library(DBI)
+library(RSQLite)
+#加载数据库操作相关的包
+
+con <- dbConnect(RSQLite::SQLite(),  "data/doubs.sqlite")
+#创建和连接名为doubs.sqlite数据库
+
+dbListTables(con)
+#查看这个数据库里目前有哪些表
+
+dbWriteTable(con, "Spe_sqlite", Spe, overwrite = TRUE)
+#将数据框 Spe 写入 SQLite 数据库中，表名为 Spe_sqlite
+
+
+#3) 查看Spe_sqlite，并删除所有列为0的行，然后把数据拉到R内存。
+
+library(tidyverse)
+#加载 tidyverse 包，用于数据处理
+
+Spe_tbl <- tbl(con, "Spe_sqlite")
+#将数据库中的Spe_sqlite 表作为一个可操作的数据库表对象读入
+
+Spe_tbl
+
+Spe_tbl_sel <- Spe_tbl %>% 
+  filter(if_any(everything(), ~ . != 0))
+#对数据库表进行筛选
+
+Spe_tbl_sel
+
+Spe_local <- collect(Spe_tbl_sel) 
+#将筛选后的结果从数据库中提取到 R 内存中，保存为本地数据框Spe_local
+
+Spe_local
+
+#4) 将Spe_local以csv格式保存到data文件夹里。
+
+write.csv(Spe_local, "data/Spe_local.csv")
+#将 Spe_local 保存为 CSV 文件到 data 文件夹中
+```
+
+
