@@ -1,0 +1,61 @@
+---
+title: "Homework-202606"
+author: "LiuYanru"
+date: "2026-04-21"
+output: 
+  word_document:
+    reference_docx: reference.docx
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# 利用QGIS中quickmapservices和quickOSM插件，详细描述有关步骤，从OSM访问和下载doubs数据，通过选择特征获得准确的doubs，保存为doubs_river.geojson格式。
+
+## 步骤：
+（1）安装两个插件：Plugins > Manage and Install Plugins，搜索并安装 QuickMapServices 和 QuickOSM。
+（2）加载底图：Web > QuickMapServices > OSM > OSM Standard。
+（3）把地图缩放到法国—瑞士边境的 Doubs 河流域。
+（4）使用 QuickOSM 下载河流数据：
+       在 Quick query 中设置：
+          Key：waterway；
+          Value：river；
+          In：选择 Canvas extent；
+          run进行查询
+（5）在结果图层中筛选Doubs河：查询完成后，QGIS 会生成一个或多个临时图层。
+选择表示线要素的结果图层，右键点击该图层，打开属性表，在属性表中使用 Select By Expression，输入如下表达式："name" = 'Doubs' AND "waterway" = 'river'执行后，名称为 Doubs 且类型为 river 的要素会被选中。
+（6）导出为 GeoJSON：在完成选择后，右键点击结果图层，选择：Export > Save Selected Features As...
+然后设置：
+  Format：GeoJSON
+  File name：doubs_river.geojson
+勾选仅导出已选要素，完成保存。
+
+# 关于生物群落数据的探索性分析，主要包括针对样地/样点的分析（Q-mode），以及针对物种/栖息地环境的分析（R-mode），请回答如下问题：
+
+## 针对样点的分析主要是聚类分析，聚类分析是基于距离、相关系数或协方差？ 有哪几种主要聚类方法？
+
+   聚类分析通常是基于样点之间的距离或相异度矩阵进行的；相关系数可以先转换为距离再用于聚类，但协方差由于受量纲影响较大，在群落样点聚类中一般不是首选。主要聚类方法包括层次聚类和划分式聚类。其中层次聚类又可分为凝聚式与分裂式，常见连接方法有 single linkage、complete linkage、average linkage（UPGMA）和 Ward 法。
+
+## 针对物种或环境的分析主要是排序分析，即识别物种按照特定的环境梯度变化的规律，排序是基于距离还是相关系数、协方差？如何选择排序模型（单峰或线性模型）？限制性排序与非限制性排序主要区别是什么？
+
+   针对物种或环境（R-mode）的分析主要采用排序分析。排序分析并不统一地只基于距离或只基于相关系数/协方差，而是依赖于具体方法：PCA 和 RDA 主要基于方差—协方差或相关结构；CA 和 CCA 主要基于卡方惯量（chi-square inertia）；PCoA、NMDS 和 dbRDA 则主要基于距离或相异度。在线性模型和单峰模型的选择上，通常先做 DCA，并根据第一轴长度判断：若第一轴长度小于 3 SD，适合线性模型；若大于 4 SD，适合单峰模型；若介于 3–4 SD 之间，则两类模型均可。限制性排序与非限制性排序的主要区别在于，前者将环境变量直接纳入模型并约束排序轴，后者则只依据群落数据本身提取主要格局，再用环境变量辅助解释。
+
+## 对双序图/三序图的解释要看标度，当scaling=1，该图表示的意思是什么？当scaling=2，图中矢量长度和夹角分别表示的是什么？
+
+   对双序图或三序图的解释必须结合标度（scaling）。当 scaling = 1 时，图的重点在于样点之间的距离关系，因此更适合解释样点分布格局和样点间相似性；在对应分析类方法中，低维空间中的样点距离近似反映高维空间中的卡方距离。当 scaling = 2 时，图的重点转向物种或环境变量之间的关系。此时，矢量长度通常表示变量与排序轴关系的强弱或该变量在当前排序图中的表示程度，矢量越长，说明相关越强；矢量之间的夹角则近似表示变量间相关性，锐角表示正相关，直角附近表示相关弱，钝角表示负相关。
+
+
+
+
+
+
+
+
+
+
