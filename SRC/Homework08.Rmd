@@ -1,0 +1,137 @@
+---
+title: "Homework-202608"
+author: "LiuYanru"
+date: "2026-05-01"
+output: 
+  word_document:
+    reference_docx: reference.docx
+    number_sections: false
+---
+
+# Homework-08：Doubs 河流 CHE 鱼类生物量时间序列预测
+
+## 题目说明
+
+本作业基于 doubs 河流鱼群研究数据，筛选 `VOLPla` 站点中 `CHE` 鱼类的个体生物量记录，并使用过去年份的滞后特征构建随机森林模型，对 2019 年和 2020 年进行递归预测。
+
+## 1）代码填空
+
+题目中需要补全的三处代码如下。
+
+- 第 [7] 行：`mydata$________` 应填 `BIOMASS`，即使用筛选后数据中的生物量变量构造时间序列对象。
+- 第 [9] 行：`log() |> ______` 应填 `diff()`，即对取对数后的序列做一阶差分，使序列更接近平稳。
+- 第 [12] 行：`________(ts_train_trans, lag_order + 1)` 应填 `embed`，即通过 `embed()` 构造当前值及其滞后值组成的滞后矩阵。
+
+需要注意：题目第 [12] 行写成了 `lag.order + 1`，但前面定义的变量名是 `lag_order <- 2`。因此，代码中应统一写为 `lag_order + 1`，否则会因找不到对象 `lag.order` 而报错。
+
+补全后的关键代码如下：
+
+```{r eval=FALSE}
+ts <- ts(mydata$BIOMASS, start = 1994, frequency = 1)
+
+ts_train <- window(ts, end = 2018)
+ts_train_trans <- ts_train |> log() |> diff()
+
+lag_order <- 2
+horizon <- 2
+
+ts_train_mbd <- embed(ts_train_trans, lag_order + 1)
+```
+
+完整代码如下。为了让代码更稳妥，读入数据时去掉了文件名后多余的空格，并加入 `header = TRUE`；同时按日期排序，以保证时间序列顺序正确。
+
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(randomForest)
+
+# 读取数据。请将 fishBiomassData.txt 放在当前工作目录下。
+data <- read.table("fishBiomassData.txt", header = TRUE)
+
+# 筛选 VOLPla 站点中 CHE 鱼类的生物量记录
+mydata <- data |>
+  subset(STATION == "VOLPla" & SP == "CHE") |>
+  select(DATE, BIOMASS) |>
+  arrange(DATE)
+
+# 构建关于 CHE 个体生物量的 ts 对象
+ts <- ts(mydata$BIOMASS, start = 1994, frequency = 1)
+
+# 划分训练集，并通过对数变换和一阶差分使序列更平稳
+ts_train <- window(ts, end = 2018)
+ts_train_trans <- ts_train |> log() |> diff()
+
+# 用过去 2 年滚动预测 2019、2020 年
+lag_order <- 2
+horizon <- 2
+
+# 构建滞后矩阵：第 1 列是当前差分值，后面列是滞后 1 年、滞后 2 年的差分值
+ts_train_mbd <- embed(ts_train_trans, lag_order + 1)
+Y_train <- ts_train_mbd[, 1]
+X_train <- ts_train_mbd[, -1]
+
+# 创建测试集，并以最后一行 lag 特征作为测试输入
+y_test <- window(ts, start = 2019, end = 2020)
+x_test <- ts_train_mbd[nrow(ts_train_mbd), c(1:lag_order)]
+
+# 建立训练与递归预测 for 循环
+pred_rf <- numeric(horizon)
+for (i in 1:horizon) {
+  set.seed(1)
+  fit_rf <- randomForest(X_train, Y_train)
+  pred_rf[i] <- predict(fit_rf, t(as.matrix(x_test)))
+  x_test <- c(pred_rf[i], x_test[1:(lag_order - 1)])
+  Y_train <- c(Y_train[-1], pred_rf[i])
+  X_train <- rbind(X_train[-1, ], x_test)
+}
+
+# pred_rf 是对数一阶差分尺度上的预测值
+pred_rf
+```
+
+如果需要把预测结果从“对数差分尺度”还原到原始生物量尺度，可以继续使用下面代码：
+
+```{r eval=FALSE}
+# 将差分预测值还原为原始 BIOMASS 尺度
+last_log_biomass <- as.numeric(log(window(ts, start = 2018, end = 2018)))
+pred_log_biomass <- last_log_biomass + cumsum(pred_rf)
+pred_biomass <- exp(pred_log_biomass)
+
+names(pred_biomass) <- 2019:2020
+pred_biomass
+```
+
+## 2）基于生物量构造滞后特征并递归预测的基本原理
+
+上述代码的核心思想是把原本的时间序列预测问题转化为一个有监督学习问题。对于每一年的 CHE 鱼类生物量，先按照时间顺序形成年度时间序列，然后通过对数变换和一阶差分处理得到较平稳的新序列。对数变换可以减弱极端值和方差随均值变化的问题；一阶差分则用相邻年份对数生物量的变化量表示序列，从而减少长期趋势对建模的影响。
+
+在完成变换后，代码使用 `embed()` 函数构造滞后矩阵。设变换后的序列为 $z_t$，当 `lag_order = 2` 时，模型使用过去两年的信息预测当前年份的变化，即用 $z_{t-1}$ 和 $z_{t-2}$ 作为输入特征，用 $z_t$ 作为输出变量。这样，时间序列就被整理成了类似普通机器学习中的训练样本：
+
+```{r eval=FALSE}
+Y_train = z_t
+X_train = c(z_{t-1}, z_{t-2})
+```
+
+随后，随机森林模型学习“过去两年变化量”和“当前年份变化量”之间的非线性关系。随机森林由多棵决策树组成，能够捕捉变量之间较复杂的非线性关系，并通过集成多棵树的结果降低单棵树预测的不稳定性。
+
+多步预测时，代码采用递归预测策略。首先用训练集中最后两年的滞后特征预测 2019 年的变化量；得到 2019 年预测值后，把它作为新的最新滞后值加入 `x_test`，再与前一年的滞后值一起用于预测 2020 年。也就是说，第二步预测会使用第一步的预测结果作为输入之一。其过程可以概括为：
+
+1. 用已知的最后两个滞后值预测 2019 年；
+2. 将 2019 年预测值放入滞后特征；
+3. 再用更新后的滞后特征预测 2020 年；
+4. 若预测更远年份，则继续重复这一过程。
+
+这种方法的优点是可以用一个单步预测模型实现多步预测，不需要为每个预测年份单独建立模型；缺点是预测误差可能会逐步传递，因为后续年份的预测会依赖前面年份的预测值。因此，在解释结果时应说明 `pred_rf` 输出的是对数一阶差分尺度上的预测值，如需得到原始生物量预测值，需要进一步做累积求和和指数反变换。
+
+## 结论
+
+本题完整填空答案为：
+
+```{r eval=FALSE}
+mydata$BIOMASS
+
+ts_train |> log() |> diff()
+
+embed(ts_train_trans, lag_order + 1)
+```
+
+从建模角度看，该方法先对 CHE 鱼类生物量时间序列进行对数差分，再用过去 2 年的滞后变化量作为随机森林输入特征，最后通过递归方式连续预测 2019 年和 2020 年的生物量变化。
