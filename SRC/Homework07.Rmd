@@ -1,0 +1,159 @@
+---
+title: "Homework-202607"
+author: "LiuYanru"
+date: "2026-05-01"
+output: 
+  word_document:
+    reference_docx: reference.docx
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# 1. 利用 QGIS 获取 Doubs 样点地理坐标系
+
+Doubs 数据集中的样点坐标为局部平面坐标，只有 `x`、`y` 数值，缺少明确的坐标参考系统（CRS）。因此不能直接把它当作经纬度使用，需要先通过 QGIS 地理配准，把局部坐标与真实地图上的 Doubs 河位置对应起来。
+
+本次处理采用的地理坐标系为 **WGS 84（EPSG:4326）**。QGIS 中的基本步骤如下。
+
+1. 将 Doubs 样点的 `x`、`y` 坐标作为分隔文本图层导入 QGIS。导入时先设置为未知 CRS 或临时局部坐标。
+2. 在 QGIS 中加载底图，例如 OpenStreetMap、Google Satellite 或其他可辨认 Doubs 河流走向的在线底图，并把项目 CRS 设置为 WGS 84（EPSG:4326）。
+3. 根据 Doubs 河的整体形状和关键位置，选取若干控制点，例如河源、河流东侧弯曲段、北侧弯曲段和下游汇合处。
+4. 在“地理配准器”或矢量配准工具中，为局部坐标图上的控制点填写其在底图中的经纬度坐标。
+5. 选择一阶多项式、Helmert 或薄板样条变换方法进行配准；检查残差，如果个别点残差过大，需要重新选点或增加控制点。
+6. 将配准后的样点、河流和 DEM 统一到同一 CRS；如果后续分析需要米作为距离单位，应再投影到合适的投影坐标系，例如 Lambert-93（EPSG:2154）。
+
+本次配准采用的对应控制点如下（经纬度为 WGS 84，单位为度；因原始坐标缺少 CRS，以下坐标应视为基于控制点配准得到的近似地理坐标）。
+
+| 控制点 | 局部坐标 x | 局部坐标 y | 对应位置 | 经度 Lon | 纬度 Lat |
+|---:|---:|---:|:---|---:|---:|
+| 1 | 88 | 7 | Doubs 河源 | 6.197 | 46.711 |
+| 16 | 266 | 209 | 东侧弯曲段 | 7.168 | 47.250 |
+| 24 | 179 | 233 | 北侧弯曲段 | 6.805 | 47.480 |
+| 30 | 8 | 133 | Saône 汇合处 | 5.083 | 46.895 |
+
+这些控制点覆盖了研究区的东、西、南、北方向，能够约束整体旋转、缩放和平移。完成配准后，样点、Doubs 河流和 DEM 必须使用同一 CRS，否则后续叠加绘图和距离计算会出现空间错位。
+
+# 2. ggplot2 绘制 DEM、Doubs 河流和样点
+
+下面是完成填空后的代码。这里先把 DEM 转成数据框，并把第三列统一改名为 `elevation`，这样后续 `fill = elevation` 不依赖原始栅格图层名称。
+
+```{r plot-dem-doubs, eval=FALSE}
+library(sf)
+library(terra)
+library(ggplot2)
+
+# DEM 转数据框；第三列通常是高程值
+names(doubs_dem) <- "elevation"
+dem_df <- as.data.frame(doubs_dem, xy = TRUE, na.rm = TRUE)
+
+# 如果 doubs_river 已经带有正确 CRS，可把 DEM 和样点设置为同一 CRS
+st_crs(doubs_dem) <- st_crs(doubs_pts) <- st_crs(doubs_river)
+
+# 若需要显式写出本题配准得到的 WGS84，也可写作：
+# st_crs(doubs_dem) <- st_crs(doubs_pts) <- st_crs(doubs_river) <- st_crs(4326)
+
+ggplot() +
+  geom_raster(data = dem_df, aes(x, y, fill = elevation)) +
+  geom_sf(data = doubs_pts, aes(geometry = geometry), color = "red") +
+  geom_sf(data = doubs_river, aes(geometry = geometry), color = "yellow") +
+  theme_minimal()
+```
+
+对应填空为：
+
+```{r answer-q2, eval=FALSE}
+dem_df <- as.data.frame(doubs_dem, xy = TRUE, na.rm = TRUE)
+st_crs(doubs_dem) <- st_crs(doubs_pts) <- st_crs(doubs_river)
+ggplot() +
+  geom_raster(data = dem_df, aes(x, y, fill = elevation)) +
+  geom_sf(data = doubs_pts, aes(geometry = geometry), color = "red") +
+  geom_sf(data = doubs_river, aes(geometry = geometry), color = "yellow") +
+  theme_minimal()
+```
+
+# 3. 空间自相关、空间滞后与 Moran's scatter plot
+
+## 3.1 Rook 邻近与 Queen 邻近的空间权重
+
+图中蓝色样点为中心样点。若按规则格网理解：
+
+- **Rook 邻近**只包括上下左右四个共边邻居。
+- **Queen 邻近**包括上下左右和四个对角方向的共边或共点邻居，共八个邻居。
+
+若采用二值空间权重，则邻居权重为 1，非邻居权重为 0。若采用行标准化权重，即每一行权重和为 1，则中心样点的权重为：
+
+Rook 邻近的行标准化权重矩阵为：
+
+\[
+W_{rook} =
+\begin{bmatrix}
+0 & 1/4 & 0 \\
+1/4 & 0 & 1/4 \\
+0 & 1/4 & 0
+\end{bmatrix}
+\]
+
+Queen 邻近的行标准化权重矩阵为：
+
+\[
+W_{queen} =
+\begin{bmatrix}
+1/8 & 1/8 & 1/8 \\
+1/8 & 0 & 1/8 \\
+1/8 & 1/8 & 1/8
+\end{bmatrix}
+\]
+
+中心位置的 0 表示不把自身作为自己的邻居。实际计算 Moran's I 或空间滞后时，通常使用行标准化权重，因为这样空间滞后可以解释为邻居值的加权平均。
+
+## 3.2 MSL 与 LMP 的坐标轴和直线含义
+
+**Moran's scatter plot（MSL）**通常把自身值与空间滞后值进行比较。横坐标是标准化后的自身属性值：
+
+\[
+z_i = \frac{x_i - \bar{x}}{s}
+\]
+
+纵坐标是标准化变量的空间滞后：
+
+\[
+\sum_j w_{ij} z_j
+\]
+
+MSL 图中的直线通常是回归拟合线。若使用行标准化空间权重，且变量已经中心化或标准化，则这条线的斜率就是全局 Moran's I。因此，斜率为正表示相似值在空间上更容易相邻，存在正空间自相关；斜率为负表示高值倾向于邻近低值，存在负空间自相关；斜率接近 0 表示空间自相关较弱。
+
+**Lagged mean plot（LMP）**也比较自身值与邻居值，但通常使用原始变量。横坐标是样点自身属性值 `x_i`，纵坐标是邻居属性值的空间滞后或邻居加权平均：
+
+\[
+\sum_j w_{ij} x_j
+\]
+
+LMP 图中的直线通常是 `y = x` 的 1:1 参考线。点落在线上表示该样点的值与邻居平均值相同；点落在线上方表示邻居平均值高于自身值；点落在线下方表示邻居平均值低于自身值。与 MSL 不同，LMP 的直线主要用于比较“自身值”和“邻居均值”是否一致，而不是直接把斜率解释为 Moran's I。
+
+# 4. 缓冲距离（buffer distance）的含义
+
+当样点属性存在空间自相关时，一个位置的属性值可能与附近样点的属性值更相似。因此，可以先创建用于预测的规则网格，再计算每个网格单元到已有样点的距离，把这些距离作为机器学习模型的输入特征。
+
+**缓冲距离**指从某个预测网格单元（通常取网格中心点）到样点或样点缓冲区边界的空间距离。最常见的做法是计算网格中心到最近样点的欧氏距离：距离越小，说明该网格越接近已有观测；距离越大，说明该网格处于样点影响较弱或样点覆盖较少的区域。
+
+在投影坐标系中，缓冲距离的单位通常是米。例如：
+
+```{r buffer-distance, eval=FALSE}
+# 预测网格 pred_grid 和样点 doubs_pts 必须处于同一投影 CRS
+# 如果要按米计算距离，建议先投影到 EPSG:2154 或其他适合研究区的投影坐标系
+pred_grid_proj <- st_transform(pred_grid, 2154)
+doubs_pts_proj  <- st_transform(doubs_pts, 2154)
+
+# 每个网格中心到所有样点的距离矩阵
+D <- st_distance(st_centroid(pred_grid_proj), doubs_pts_proj)
+
+# 最近样点距离作为机器学习特征
+pred_grid_proj$dist_to_nearest_sample <- apply(D, 1, min)
+```
+
+如果希望表达多个空间尺度的影响，也可以建立 100 m、500 m、1000 m 等不同半径的缓冲区，统计每个网格是否落入缓冲区、落入几个缓冲区，或距离不同样点类别的最短距离。这些变量都可以作为空间特征输入机器学习模型。
+
+
