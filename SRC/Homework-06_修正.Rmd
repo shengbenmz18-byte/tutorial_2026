@@ -1,0 +1,400 @@
+---
+title: "Homework-06-修正"
+author: "Liu Yanru"
+date: "2026.05.21`"
+output:
+  word_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 7,
+  fig.height = 5,
+  dpi = 300
+)
+```
+
+# 1. QGIS 中获取 Doubs 的 OpenStreetMap 河流数据并保存到 PostgreSQL
+
+本题要求在 QGIS 中安装 QuickMapServices 和 QuickOSM 插件，下载 Doubs 河流相关的 OpenStreetMap 数据，选择 Doubs 特征，并将图层保存为 `doubs_river.shp`，同时写入 PostgreSQL 数据库。
+
+## 1.1 插件安装
+
+在 QGIS 中依次点击：
+
+1. `Plugins` → `Manage and Install Plugins...`。
+2. 搜索并安装 `QuickMapServices` 插件，用于加载在线底图。
+3. 搜索并安装 `QuickOSM` 插件，用于从 OpenStreetMap 下载矢量要素。
+
+## 1.2 加载 OSM 底图
+
+安装完成后，点击：
+
+`Web` → `QuickMapServices` → `OSM` → `OSM Standard`
+
+这样可以在 QGIS 中显示 OpenStreetMap 底图，便于定位 Doubs 河流区域。
+
+## 1.3 使用 QuickOSM 下载 Doubs 河流数据
+
+在 QGIS 中点击：
+
+`Vector` → `QuickOSM` → `QuickOSM...`
+
+可使用以下查询条件：
+
+- Key：`waterway`
+- Value：`river`
+- In：可以选择当前地图范围，也可以输入 `Doubs, France`
+
+运行查询后，QGIS 会下载 OSM 中的河流线状要素。为了只保留 Doubs 河，可在属性表中使用表达式选择：
+
+```text
+"name" = 'Doubs'
+```
+
+如果结果中存在多个同名分段，可全部选中这些分段，然后右键图层：
+
+`Export` → `Save Selected Features As...`
+
+保存格式选择 `ESRI Shapefile`，文件名设置为：
+
+```text
+doubs_river.shp
+```
+
+## 1.4 保存到 PostgreSQL 数据库
+
+在 QGIS 中可通过以下方式保存到 PostgreSQL：
+
+1. 先在左侧 `Browser` 面板中建立 PostgreSQL 连接。
+2. 右键选中的 `doubs_river` 图层，选择 `Export` → `Save Features As...`。
+3. Format 选择 `PostgreSQL`。
+4. 选择数据库连接、schema，例如 `public`。
+5. Table name 设置为 `doubs_river`。
+6. 勾选 `Save only selected features`，确保只保存 Doubs 河流要素。
+7. 点击 `OK` 完成导入。
+
+可在 PostgreSQL 或 QGIS 中检查表是否成功保存。下面是一个可选的 R 检查代码，实际运行时需要把数据库名称、用户名和密码改成自己电脑上的配置。
+
+```{r check-postgresql, eval=FALSE}
+library(sf)
+library(DBI)
+library(RPostgres)
+
+con <- DBI::dbConnect(
+  RPostgres::Postgres(),
+  dbname = "myclasses",      
+  host = "localhost",
+  port = 5432,
+  user = "postgres",       
+  password = "root"        
+)
+
+doubs_river_pg <- sf::st_read(con, query = "SELECT * FROM public.doubs_river")
+print(doubs_river_pg)
+sf::st_crs(doubs_river_pg)
+
+DBI::dbDisconnect(con)
+```
+
+# 2. 以R内置的doubs数据集为例，进行探索分析（Exploratory Data Analysis, EDA），并回答如下问题，涉及代码嵌入文本中：
+
+```{r load-packages}
+library(ade4)
+library(vegan)
+library(dplyr)
+library(tibble)
+library(ggplot2)
+```
+
+## 2.1 将doubs数据集导入R，查看其中的fish表中各个观察站点的鱼群，从fish、env、xy表中删除无鱼站点，形成新数据表xx_clean。
+
+- `fish`：各观察站点的鱼类群落丰度数据；
+- `env`：各观察站点的环境变量；
+- `xy`：各观察站点的空间坐标。
+
+```{r load-doubs}
+data(doubs, package = "ade4")
+
+fish <- doubs$fish
+env <- doubs$env
+xy <- doubs$xy
+
+# 查看数据结构
+str(fish)
+str(env)
+str(xy)
+
+# 查看 fish 表中每个观察站点的鱼类总数
+fish_sum <- rowSums(fish, na.rm = TRUE)
+fish_sum
+
+# 找出无鱼站点
+no_fish_sites <- which(fish_sum == 0)
+no_fish_sites
+```
+
+从 `fish_sum` 可以看出，鱼类总丰度为 0 的样点即为无鱼站点。第 8 号样点无鱼，因此需要从 `fish`、`env` 和 `xy`三个表中同步删除该样点，保证三个表的站点顺序一致。
+
+```{r clean-data}
+keep_sites <- fish_sum > 0
+
+fish_clean <- fish[keep_sites, ]
+env_clean <- env[keep_sites, ]
+xy_clean <- xy[keep_sites, ]
+
+# 形成一个便于查看的综合数据表 xx_clean
+xx_clean <- cbind(
+  site = rownames(fish_clean),
+  xy_clean,
+  env_clean,
+  fish_clean
+)
+
+# 检查删除后的维度
+nrow(fish)
+nrow(fish_clean)
+dim(xx_clean)
+head(xx_clean)
+```
+
+删除无鱼站点后，`fish_clean`、`env_clean` 和 `xy_clean` 的行数一致，后续分析都基于这些清洗后的数据开展。
+
+## 2.2 fish_clean 的 Hellinger 转换、欧式距离与 Q-mode 聚类分析
+
+鱼类群落数据通常具有大量 0 值，而且不同鱼种丰度差异较大。如果直接使用原始丰度做欧式距离，容易受到高丰度物种的过度影响。因此，先对 `fish_clean` 进行 Hellinger 转换，再计算样点之间的欧式距离。
+
+Hellinger 转换的含义是：先把每个样点中各物种丰度转化为相对丰度，再对相对丰度开平方。它适合用于群落生态数据，并能使欧式距离更适合反映群落组成差异。
+
+```{r hellinger-qmode}
+# Hellinger 转换
+spe_hel <- vegan::decostand(fish_clean, method = "hellinger")
+
+# 样点之间的欧式距离，即 Q-mode 相似性/差异性分析
+fish_dist <- dist(spe_hel, method = "euclidean")
+
+# Ward 最小方差法层次聚类
+fish_hclust <- hclust(fish_dist, method = "ward.D2")
+
+# 绘制聚类图
+plot(
+  fish_hclust,
+  hang = -1,
+  main = "Q-mode clustering of fish communities after Hellinger transformation",
+  xlab = "Sampling sites",
+  sub = "Distance: Euclidean; Clustering method: Ward.D2"
+)
+```
+
+该图是 Q-mode 分析，因为聚类对象是“样点/观察站点”，而不是变量。图中距离较近、被较早合并的样点说明鱼类群落组成更相似；距离较远、在较高高度才合并的样点说明群落组成差异较大。Ward.D2 方法倾向于使组内差异最小，因此适合用于识别鱼类群落相似的站点分组。
+
+## 2.3 env_clean 的 PCA 与 R-mode 变量相关性分析
+
+PCA 用于分析环境变量之间的主要变化方向和相关关系。本题中删除无鱼的第 8 号样点后，应先对 `env_clean` 进行标准化，使每个环境变量均值为 0、标准差为 1。
+
+### 2.3.1 标准化 env_clean
+
+题目中的填空为：
+
+```r
+env_z <- vegan::decostand(env_clean, "standardize")
+```
+
+其中，`vegan::decostand()` 表示使用 `vegan` 包中的标准化函数；`"standardize"` 表示对每一列变量进行标准化处理。
+
+```{r standardize-env}
+env_z <- vegan::decostand(env_clean, "standardize")
+
+# 检查标准化结果：均值应接近 0，标准差应接近 1
+round(colMeans(env_z), 3)
+round(apply(env_z, 2, sd), 3)
+```
+
+### 2.3.2 使用 prcomp() 和 rda() 进行 PCA
+
+`stats::prcomp()` 是 R 自带的 PCA 函数；`vegan::rda()` 在没有约束变量时也可以执行 PCA。二者用于标准化后的 `env_z` 时，本质上都在分析环境变量矩阵的主要变化方向，结果应基本一致，只是坐标轴方向可能出现正负号相反的情况，这是 PCA 中正常现象。
+
+```{r pca-prcomp}
+pca_env_prcomp <- prcomp(env_z)
+summary(pca_env_prcomp)
+pca_env_prcomp$rotation
+
+biplot(
+  pca_env_prcomp,
+  scale = 0,
+  main = "PCA of environmental variables by stats::prcomp"
+)
+```
+
+题目中 `prcomp()` 的双标图代码填空可以写为：
+
+```r
+biplot(pca_env_prcomp, scale = 0)
+```
+
+其中，`scale = 0` 表示不再额外缩放主成分得分和变量载荷，便于直接观察样点和变量方向。
+
+```{r pca-rda}
+pca_env_rda <- vegan::rda(env_z)
+summary(pca_env_rda)
+
+biplot(
+  pca_env_rda,
+  scaling = 2,
+  main = "PCA of environmental variables by vegan::rda"
+)
+```
+
+题目中 `rda()` 的 PCA 与双标图代码填空为：
+
+```r
+pca_env_rda <- vegan::rda(env_z)
+biplot(pca_env_rda, scaling = 2)
+```
+
+其中，`scaling = 2` 更强调变量之间的相关关系，适合用于 R-mode 分析。R-mode 分析关注的是“变量与变量之间的关系”，例如不同环境因子之间是否同向变化、反向变化或几乎不相关。
+
+### 2.3.3 PCA 双标图含义解释
+
+`biplot(pca_env_rda, scaling = 2)` 的解释可以从样点和变量两个角度理解。
+
+从变量角度看，图中的箭头代表环境变量。箭头越长，说明该变量在前两个主成分平面上的表示越好，对主要变化方向的贡献越明显。两个变量箭头之间的夹角可以近似表示相关关系：夹角较小表示正相关，方向相反表示负相关，接近 90° 表示相关性较弱。
+
+从样点角度看，图中的点代表采样站点。两个样点在图上越接近，说明它们的综合环境条件越相似；相距越远，说明环境条件差异越大。若某个样点沿某个环境变量箭头方向投影较远，说明该样点在该环境变量上的取值相对较高；若位于相反方向，则说明该变量取值相对较低。
+
+因此，该 PCA 双标图可以同时用于识别主要环境梯度、判断环境变量之间的相关性，并观察不同采样站点在环境条件上的相似性与差异性。
+
+# 3. fish 与 env 关系的 RDA 分析
+
+冗余分析 RDA 用于分析响应矩阵和解释矩阵之间的线性关系。本题中响应矩阵为 Hellinger 转换后的鱼类群落矩阵 `spe_hel`，解释矩阵为标准化后的环境变量矩阵 `env_z`。
+
+## 3.1 通过 DCA 第一轴长度选择排序模型
+
+在进行约束排序前，常用 DCA 第一轴长度判断应使用线性模型还是单峰模型：
+
+- 当 DCA1 轴长度 `< 3` 时，物种沿环境梯度的变化通常更接近线性关系，宜选择 RDA；
+- 当 DCA1 轴长度 `> 4` 时，物种沿环境梯度的变化通常更接近单峰关系，宜选择 CCA；
+- 当 DCA1 轴长度在 `3--4` 之间时，RDA 和 CCA 均可尝试，并结合生态意义和模型解释效果判断。
+
+因此，题目中的填空为：
+
+```text
+当 DCA1 < 3，选择用 RDA；当 DCA1 > 4，选择 CCA。
+```
+
+```{r dca-model-choice}
+# DCA 一般用于判断物种数据沿第一排序轴的梯度长度
+# 这里按照题目要求对 spe_hel 进行 DCA 判断
+dca_spe <- vegan::decorana(spe_hel)
+dca_spe
+```
+
+运行上方代码后，查看输出中的 `Axis lengths` 行。如果 DCA1 小于 3，则后续使用 RDA；如果 DCA1 大于 4，则更适合使用 CCA。
+
+## 3.2 环境变量选择：删除共线变量或使用 ordiR2step()
+
+RDA 中的环境变量不宜存在严重共线性。变量共线性过强会导致模型参数不稳定，也会影响双标图解释。因此可以通过两种方式选择环境变量：
+
+1. 手动删除 `env_z` 中 VIF 较高或共线性较强的变量；
+2. 使用 `vegan::ordiR2step()` 进行逐步选择，使模型的调整后决定系数 `adjusted R^2` 尽可能提高，同时避免过度拟合。
+
+因此，题目中的填空为：
+
+```text
+手动删除 env_z 中共线性较强或 VIF 过高的变量；
+或者通过 vegan 包中 ordiR2step() 函数最大化 adjusted R^2，最终达到选择变量的目的。
+```
+
+```{r rda-full-vif}
+env_z_df <- as.data.frame(env_z)
+
+# 全模型：所有环境变量都作为解释变量
+rda_full <- vegan::rda(spe_hel ~ ., data = env_z_df)
+summary(rda_full)
+
+# 检查方差膨胀因子 VIF
+vif_values <- vegan::vif.cca(rda_full)
+vif_values
+
+# 一般 VIF > 10 可视为存在较强共线性；也可根据课程要求使用更严格阈值，如 VIF > 5
+high_vif_vars <- names(vif_values[vif_values > 10])
+high_vif_vars
+```
+
+如果上一步发现某些变量 VIF 过高，可以手动删除后重新建模。例如：
+
+```{r rda-manual-select}
+# 若没有 VIF > 10 的变量，则 env_z_manual 与 env_z_df 相同
+if (length(high_vif_vars) > 0) {
+  env_z_manual <- env_z_df[, !(names(env_z_df) %in% high_vif_vars), drop = FALSE]
+} else {
+  env_z_manual <- env_z_df
+}
+
+rda_manual <- vegan::rda(spe_hel ~ ., data = env_z_manual)
+summary(rda_manual)
+vegan::RsquareAdj(rda_manual)
+```
+
+更推荐的自动变量选择方式是使用 `ordiR2step()`。它以调整后的 R² 为约束进行逐步筛选，比单纯根据原始 R² 更能避免因为加入过多变量而过拟合。
+
+```{r rda-ordir2step}
+set.seed(123)
+
+# 空模型：没有环境变量
+rda_null <- vegan::rda(spe_hel ~ 1, data = env_z_df)
+
+# 全模型：所有环境变量
+rda_full <- vegan::rda(spe_hel ~ ., data = env_z_df)
+
+# 使用 ordiR2step 进行变量选择
+rda_sel <- vegan::ordiR2step(
+  rda_null,
+  scope = formula(rda_full),
+  direction = "forward",
+  R2scope = TRUE,
+  permutations = 999,
+  trace = FALSE
+)
+
+rda_sel
+vegan::RsquareAdj(rda_full)
+vegan::RsquareAdj(rda_sel)
+```
+
+## 3.3 RDA 显著性检验与绘图解释
+
+```{r rda-tests}
+# 整体模型显著性检验
+anova(rda_sel, permutations = 999)
+
+# 各解释变量的显著性检验
+anova(rda_sel, by = "term", permutations = 999)
+
+# 各排序轴的显著性检验
+anova(rda_sel, by = "axis", permutations = 999)
+```
+
+```{r rda-plot}
+plot(
+  rda_sel,
+  scaling = 2,
+  main = "RDA of Hellinger-transformed fish community constrained by environmental variables"
+)
+```
+
+RDA 图可按以下方式解释：
+
+1. 样点之间距离越近，说明其鱼类群落组成在被环境变量解释后的结构越相似。
+2. 环境变量箭头越长，说明该变量对鱼类群落变化的解释作用越明显。
+3. 两个环境变量箭头夹角较小，说明二者正相关；方向相反说明负相关；接近垂直说明相关性较弱。
+4. 样点沿某环境变量箭头方向投影越远，说明该样点该环境因子的相对水平越高。
+5. 如果物种名或样点靠近某个环境变量箭头方向，说明该物种或样点可能与该环境梯度关系较强。
+
+由于本分析使用的是 Hellinger 转换后的鱼类群落数据，RDA 结果更适合解释鱼类群落组成在环境梯度上的线性变化。变量选择后的 `rda_sel` 模型比直接使用全部环境变量的模型更简洁，能够减少共线性和过度拟合问题。
